@@ -148,7 +148,7 @@ Public 仓库的标准 GitHub-hosted Runner 可以免费运行，但不建议直
 3. 企业微信群收到消息。
 4. Artifact 中包含 JSON、Markdown、汇率和原始日报。
 
-工作流每天 `17:17 UTC` 运行，对应 Pacific Time 的 `09:17` 或 `10:17`，晚于 Apple 通常的 `08:00 PT` 报表发布时间。原始日报和冻结汇率使用滚动 Actions Cache；Artifact 保留 30 天。
+工作流每天 `12:00 UTC` 运行，即北京时间 `20:00`，对应 Pacific Time 的 `04:00` 或 `05:00`。任务默认获取最近通常可用的日报日，因此即使当天日报尚未发布，也会回退到前一个可用日期。原始日报和冻结汇率使用滚动 Actions Cache；Artifact 保留 30 天。
 
 ## 可选：Team API Key 模式
 
