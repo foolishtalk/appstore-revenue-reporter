@@ -1,0 +1,62 @@
+name: Bug report
+description: 报告可复现的问题或数据差异
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请勿粘贴 Reporter Token、Webhook、`.p8` 私钥或真实销售报表。金额、App 名称和标识符请先脱敏。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 说明实际行为和预期行为。
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响范围
+      options:
+        - Apple Reporter 下载
+        - Proceeds 计算
+        - CNY 汇率
+        - 周期比较
+        - 企业微信消息
+        - GitHub Actions
+        - 文档
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python 版本
+      placeholder: "3.12"
+  - type: input
+    id: java
+    attributes:
+      label: Java 版本
+      placeholder: "17"
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 使用脱敏参数描述最小复现过程。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认 App Store Connect 使用 Pacific Time 和 Proceeds 指标。
+          required: true
+        - label: 我已删除所有凭证、Webhook 和真实业务标识。
+          required: true

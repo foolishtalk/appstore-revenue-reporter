@@ -1,0 +1,43 @@
+name: Feature request
+description: 建议新的数据源、输出或运维能力
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景
+      description: 说明当前工作流中的问题，而不只是期望的实现。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 描述输入、输出、统计口径和兼容性影响。
+    validations:
+      required: true
+  - type: dropdown
+    id: contract
+    attributes:
+      label: 是否影响统计契约
+      options:
+        - 不影响 Proceeds + Pacific Time
+        - 影响收益指标
+        - 影响时区或日期边界
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 说明已经考虑过的其他方式。
+  - type: checkboxes
+    id: security
+    attributes:
+      label: 安全确认
+      options:
+        - label: 本 Issue 不包含任何真实凭证、Webhook 或销售数据。
+          required: true

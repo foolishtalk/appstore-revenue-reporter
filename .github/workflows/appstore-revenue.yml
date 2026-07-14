@@ -1,0 +1,76 @@
+name: App Store Revenue Report
+
+on:
+  schedule:
+    # 17:17 UTC = 01:17 Asia/Shanghai, and 09:17/10:17 Pacific Time.
+    # Apple says daily reports are generally available by 08:00 Pacific Time.
+    - cron: "17 17 * * *"
+  workflow_dispatch:
+    inputs:
+      end_date:
+        description: "Optional Apple report end date (YYYY-MM-DD)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Java for Apple Reporter
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build rolling cache key
+        id: report-cache-key
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Apple reports and frozen FX rates
+        uses: actions/cache@v4
+        with:
+          path: |
+            output/raw
+            output/fx-rates
+          key: appstore-revenue-data-v2-${{ runner.os }}-${{ steps.report-cache-key.outputs.date }}
+          restore-keys: |
+            appstore-revenue-data-v2-${{ runner.os }}-
+
+      - name: Fetch revenue and notify WeCom
+        env:
+          ASC_AUTH_METHOD: reporter
+          ASC_REPORTER_ACCESS_TOKEN: ${{ secrets.ASC_REPORTER_ACCESS_TOKEN }}
+          ASC_REPORTER_ACCOUNT: ${{ secrets.ASC_REPORTER_ACCOUNT }}
+          ASC_VENDOR_NUMBER: ${{ secrets.ASC_VENDOR_NUMBER }}
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          REPORT_END_DATE: ${{ inputs.end_date }}
+        run: python scripts/fetch_appstore_revenue.py --send-wecom
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appstore-revenue-report-${{ github.run_id }}
+          path: output/
+          if-no-files-found: ignore
+          retention-days: 30
