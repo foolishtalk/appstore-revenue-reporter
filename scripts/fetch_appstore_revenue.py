@@ -170,7 +170,7 @@ class MonthlyFxRates:
 
 @dataclass(frozen=True)
 class DailyTotals:
-    """Net sales units and proceeds parsed from one Apple daily report."""
+    """Paid net units and proceeds parsed from one Apple daily report."""
 
     amounts: Mapping[str, Decimal]
     units: Decimal
@@ -764,7 +764,7 @@ def _first_value(row: Mapping[str, str], names: Sequence[str]) -> str | None:
 
 
 def parse_daily_totals(tsv_text: str) -> DailyTotals:
-    """Return net units and total proceeds (Units × Developer Proceeds)."""
+    """Return paid net units and total proceeds (Units × Developer Proceeds)."""
     reader = csv.DictReader(io.StringIO(tsv_text), delimiter="\t")
     if not reader.fieldnames:
         return DailyTotals({}, Decimal("0"))
@@ -792,7 +792,10 @@ def parse_daily_totals(tsv_text: str) -> DailyTotals:
         except InvalidOperation as exc:
             raise ReporterError(f"日报第 {row_number} 行包含无效的 Units 或 Developer Proceeds") from exc
         totals[currency.upper()] += units * proceeds_per_unit
-        total_units += units
+        # Summary Sales Reports also contain free downloads, re-downloads and
+        # updates. They have zero Developer Proceeds and are not paid sales.
+        if proceeds_per_unit != 0:
+            total_units += units
     return DailyTotals(dict(totals), total_units)
 
 
@@ -1001,7 +1004,7 @@ def render_markdown(report: Mapping[str, object]) -> str:
         "",
         f"> Apple 报表统计截止日（太平洋时间）：{report['end_date']}",
         "> 收入口径：Units × Developer Proceeds，统一折算为 CNY",
-        "> 销售数量口径：净 Units，退款负数会冲减",
+        "> 销售数量口径：产生收益的净 Units；不含免费下载、重新下载和更新",
         "> 对比口径：与紧邻的上一等长周期相比",
         "",
     ]
@@ -1188,7 +1191,10 @@ def build_report(
         "auth_method": auth_method,
         "definitions": {
             "revenue": "Units multiplied by Developer Proceeds, grouped by Currency of Proceeds",
-            "units": "net Units from Apple reports; refunds with negative Units reduce the total",
+            "units": (
+                "net Units on rows with non-zero Developer Proceeds; excludes free "
+                "downloads, re-downloads, and updates"
+            ),
             "last_quarter": "rolling 90 Apple reporting days ending on end_date",
             "comparison": "immediately preceding period with the same number of days",
             "cny_conversion": (

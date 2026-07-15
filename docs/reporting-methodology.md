@@ -16,7 +16,7 @@
 
 ## 销售数量指标：Units
 
-日报同时汇总 Apple Summary Sales Report 的 `Units`，作为销售数量。各周期的销售数量为周期内所有日报的 `Units` 之和；退款通常是负数 `Units`，因此显示的是扣除退款后的净销售数量。
+日报同时汇总 Apple Summary Sales Report 中 `Developer Proceeds` 非零行的 `Units`，作为实际产生收益的销售数量。免费下载、重新下载和更新的 `Developer Proceeds` 为 0，不计入销售数量；退款通常是负数 `Units`，会冲减数量。因此显示的是扣除退款后的付费净销售数量。
 
 销售数量与收入使用相同的当前周期和上一等长周期，并分别计算数量差和涨跌幅。销售数量不做汇率换算，也不与收入涨跌幅混用。
 

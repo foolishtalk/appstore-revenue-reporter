@@ -23,7 +23,7 @@
 
 > Apple 报表统计截止日（太平洋时间）：2026-01-31
 > 收入口径：Units × Developer Proceeds，统一折算为 CNY
-> 销售数量：周期内净 Units（退款负数会冲减）
+> 销售数量：产生收益的净 Units（不含免费下载、重新下载和更新）
 > 对比口径：与紧邻的上一等长周期相比
 
 最近 7 天　¥800.00　+14.3%
@@ -67,7 +67,7 @@ python scripts/fetch_appstore_revenue.py --send-wecom
 | 项目 | 口径 |
 | --- | --- |
 | 收益指标 | `Developer Proceeds`，按 `Units × Developer Proceeds` 汇总 |
-| 销售数量 | 周期内净 `Units`，退款负数冲减，并与上一等长周期比较 |
+| 销售数量 | 仅统计 `Developer Proceeds` 非零行的净 `Units`；排除免费下载、重新下载和更新 |
 | 报表时区 | `America/Los_Angeles`，即 Pacific Time |
 | 展示币种 | CNY |
 | 汇率 | 报表月使用上一个自然月的日均参考汇率，月内冻结 |

@@ -179,6 +179,17 @@ class ParsingTests(unittest.TestCase):
         tsv = "Units\tDeveloper Proceeds\tDeveloper Proceeds Currency\n2\t1.50\teur\n"
         self.assertEqual(reporter.parse_report_totals(tsv), {"EUR": Decimal("3.00")})
 
+    def test_sales_units_exclude_free_updates_and_downloads(self):
+        tsv = (
+            "Units\tDeveloper Proceeds\tCurrency of Proceeds\tProduct Type Identifier\n"
+            "152\t0.00\tCNY\tF7\n"
+            "3\t1.00\tCNY\tIA1\n"
+            "-1\t1.00\tCNY\tIA1\n"
+        )
+        totals = reporter.parse_daily_totals(tsv)
+        self.assertEqual(totals.units, Decimal("2"))
+        self.assertEqual(totals.amounts, {"CNY": Decimal("2.00")})
+
     def test_rejects_missing_required_columns(self):
         with self.assertRaisesRegex(reporter.ReporterError, "Developer Proceeds"):
             reporter.parse_report_totals("Units\tCurrency of Proceeds\n1\tUSD\n")
