@@ -66,6 +66,7 @@ output/
 - `coverage.no_report_days` 符合预期。
 - `exchange_rates.months` 覆盖所有有非零收益的报表月。
 - 四个周期都包含 `comparison`。
+- 四个周期都包含 `units`，且 `comparison` 中包含上期 `units`、`change_units`、`unit_change_percent` 和 `unit_direction`。
 - Artifact 和企业微信发送步骤成功。
 
 ## 常见错误

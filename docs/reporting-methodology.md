@@ -14,6 +14,12 @@
 
 本项目不使用 `Customer Price` 作为收入。`Customer Price` 对应用户支付额，即 App Store Connect 中的 Sales；例如一笔 USD 4.99 的销售，Developer Proceeds 可能是 USD 4.24。
 
+## 销售数量指标：Units
+
+日报同时汇总 Apple Summary Sales Report 的 `Units`，作为销售数量。各周期的销售数量为周期内所有日报的 `Units` 之和；退款通常是负数 `Units`，因此显示的是扣除退款后的净销售数量。
+
+销售数量与收入使用相同的当前周期和上一等长周期，并分别计算数量差和涨跌幅。销售数量不做汇率换算，也不与收入涨跌幅混用。
+
 ## 日期口径：Pacific Time
 
 Reporter 下载的日报固定按 Pacific Time 划分，不能在请求中改成 UTC。程序使用 `America/Los_Angeles`：
@@ -52,6 +58,8 @@ Reporter 下载的日报固定按 Pacific Time 划分，不能在请求中改成
 - 上期为 0、本期为负：显示“转负”。
 
 百分比保留最多一位小数；CNY 金额保留两位小数。百分比使用未提前舍入的金额计算。
+
+销售数量的涨跌幅使用同一公式，其中 CNY 金额替换为净 `Units`；上期为 0 时同样显示“新增”“转负”或 `=`。
 
 ## CNY 管理汇率
 

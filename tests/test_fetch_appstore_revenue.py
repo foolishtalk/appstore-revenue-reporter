@@ -171,6 +171,10 @@ class ParsingTests(unittest.TestCase):
         totals = reporter.parse_report_totals(text)
         self.assertEqual(totals, {"USD": Decimal("4.45"), "CNY": Decimal("9.00")})
 
+        daily = reporter.parse_daily_totals(text)
+        self.assertEqual(daily.units, Decimal("6"))
+        self.assertEqual(daily.amounts, totals)
+
     def test_supports_legacy_currency_header(self):
         tsv = "Units\tDeveloper Proceeds\tDeveloper Proceeds Currency\n2\t1.50\teur\n"
         self.assertEqual(reporter.parse_report_totals(tsv), {"EUR": Decimal("3.00")})
@@ -384,6 +388,42 @@ class SummaryTests(unittest.TestCase):
         self.assertIn(
             '<font color="info">+20%</font>', reporter.render_markdown(report)
         )
+
+    def test_sales_units_are_compared_with_previous_period(self):
+        end = date(2026, 7, 13)
+        daily = {
+            current: reporter.DailyTotals({"CNY": Decimal("10")}, Decimal("10"))
+            for current in reporter.iter_dates(reporter.required_start_date(end), end)
+        }
+        for current in reporter.iter_dates(date(2026, 7, 7), end):
+            daily[current] = reporter.DailyTotals(
+                {"CNY": Decimal("12")}, Decimal("12")
+            )
+
+        report = reporter.build_report(end, daily)
+        period = report["periods"]["last_7_days"]
+        comparison = period["comparison"]
+        self.assertEqual(period["units"], "84")
+        self.assertEqual(comparison["units"], "70")
+        self.assertEqual(comparison["change_units"], "14")
+        self.assertEqual(comparison["unit_change_percent"], "20")
+        self.assertEqual(comparison["unit_direction"], "up")
+        markdown = reporter.render_markdown(report)
+        self.assertIn("销售数量 84", markdown)
+        self.assertIn("上期 70", markdown)
+
+    def test_refund_units_reduce_sales_quantity(self):
+        end = date(2026, 7, 13)
+        daily = {
+            current: reporter.DailyTotals({}, Decimal("0"))
+            for current in reporter.iter_dates(reporter.required_start_date(end), end)
+        }
+        daily[end] = reporter.DailyTotals({"CNY": Decimal("7")}, Decimal("9"))
+        daily[end - reporter.timedelta(days=1)] = reporter.DailyTotals(
+            {"CNY": Decimal("-1")}, Decimal("-1")
+        )
+        period = reporter.build_report(end, daily)["periods"]["last_7_days"]
+        self.assertEqual(period["units"], "8")
 
     def test_zero_previous_period_is_shown_as_new(self):
         end = date(2026, 7, 13)

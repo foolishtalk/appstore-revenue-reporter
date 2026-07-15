@@ -168,6 +168,14 @@ class MonthlyFxRates:
     observation_counts: Mapping[str, int]
 
 
+@dataclass(frozen=True)
+class DailyTotals:
+    """Net sales units and proceeds parsed from one Apple daily report."""
+
+    amounts: Mapping[str, Decimal]
+    units: Decimal
+
+
 def build_jwt(config: AppStoreConfig, now: int | None = None) -> str:
     issued_at = int(time.time()) if now is None else now
     payload = {
@@ -412,17 +420,20 @@ def load_monthly_fx_rates(
 
 
 def load_fx_tables(
-    daily_totals: Mapping[date, Mapping[str, Decimal] | None],
+    daily_totals: Mapping[date, DailyTotals | Mapping[str, Decimal] | None],
     cache_dir: Path,
     *,
     session: requests.Session | None = None,
 ) -> dict[str, MonthlyFxRates]:
     currencies_by_month: defaultdict[str, set[str]] = defaultdict(set)
     for report_date, totals in daily_totals.items():
-        if not totals:
+        if totals is None:
+            continue
+        amounts = totals.amounts if isinstance(totals, DailyTotals) else totals
+        if not amounts:
             continue
         currencies_by_month[_month_key(report_date)].update(
-            currency for currency, amount in totals.items() if amount != 0
+            currency for currency, amount in amounts.items() if amount != 0
         )
     client = session or requests.Session()
     return {
@@ -752,11 +763,11 @@ def _first_value(row: Mapping[str, str], names: Sequence[str]) -> str | None:
     return None
 
 
-def parse_report_totals(tsv_text: str) -> dict[str, Decimal]:
-    """Return total proceeds by currency (Units × Developer Proceeds)."""
+def parse_daily_totals(tsv_text: str) -> DailyTotals:
+    """Return net units and total proceeds (Units × Developer Proceeds)."""
     reader = csv.DictReader(io.StringIO(tsv_text), delimiter="\t")
     if not reader.fieldnames:
-        return {}
+        return DailyTotals({}, Decimal("0"))
     reader.fieldnames = [field.strip() if field else field for field in reader.fieldnames]
 
     required = {"Units", "Developer Proceeds"}
@@ -768,6 +779,7 @@ def parse_report_totals(tsv_text: str) -> dict[str, Decimal]:
         raise ReporterError("日报缺少必要字段：" + ", ".join(absent))
 
     totals: defaultdict[str, Decimal] = defaultdict(Decimal)
+    total_units = Decimal("0")
     for row_number, row in enumerate(reader, start=2):
         if not any(value and value.strip() for value in row.values()):
             continue
@@ -780,7 +792,13 @@ def parse_report_totals(tsv_text: str) -> dict[str, Decimal]:
         except InvalidOperation as exc:
             raise ReporterError(f"日报第 {row_number} 行包含无效的 Units 或 Developer Proceeds") from exc
         totals[currency.upper()] += units * proceeds_per_unit
-    return dict(totals)
+        total_units += units
+    return DailyTotals(dict(totals), total_units)
+
+
+def parse_report_totals(tsv_text: str) -> dict[str, Decimal]:
+    """Return proceeds by currency; retained for callers that only need revenue."""
+    return dict(parse_daily_totals(tsv_text).amounts)
 
 
 def _merge_totals(target: defaultdict[str, Decimal], source: Mapping[str, Decimal]) -> None:
@@ -812,11 +830,12 @@ def convert_amounts_to_cny(
 
 def _summarize_range(
     period: Period,
-    daily_totals: Mapping[date, Mapping[str, Decimal] | None],
+    daily_totals: Mapping[date, DailyTotals | Mapping[str, Decimal] | None],
     fx_tables: Mapping[str, MonthlyFxRates],
 ) -> dict[str, object]:
     totals: defaultdict[str, Decimal] = defaultdict(Decimal)
     cny_total = Decimal("0")
+    unit_total = Decimal("0")
     report_dates = []
     no_report_dates = []
     for current in iter_dates(period.start_date, period.end_date):
@@ -825,8 +844,14 @@ def _summarize_range(
             no_report_dates.append(current.isoformat())
             continue
         report_dates.append(current.isoformat())
-        _merge_totals(totals, day)
-        cny_total += convert_amounts_to_cny(current, day, fx_tables)
+        if isinstance(day, DailyTotals):
+            amounts = day.amounts
+            unit_total += day.units
+        else:
+            # Backward compatibility for callers that supplied revenue-only mappings.
+            amounts = day
+        _merge_totals(totals, amounts)
+        cny_total += convert_amounts_to_cny(current, amounts, fx_tables)
     return {
         "start_date": period.start_date.isoformat(),
         "end_date": period.end_date.isoformat(),
@@ -839,7 +864,9 @@ def _summarize_range(
             if amount != 0
         },
         "cny_amount": decimal_to_string(cny_total),
+        "units": quantity_to_string(unit_total),
         "_cny_decimal": cny_total,
+        "_units_decimal": unit_total,
     }
 
 
@@ -861,9 +888,18 @@ def _comparison_values(current: Decimal, previous: Decimal) -> dict[str, str | N
     }
 
 
+def _unit_comparison_values(current: Decimal, previous: Decimal) -> dict[str, str | None]:
+    values = _comparison_values(current, previous)
+    return {
+        "change_units": quantity_to_string(current - previous),
+        "unit_change_percent": values["change_percent"],
+        "unit_direction": values["direction"],
+    }
+
+
 def summarize_periods(
     periods: Sequence[Period],
-    daily_totals: Mapping[date, Mapping[str, Decimal] | None],
+    daily_totals: Mapping[date, DailyTotals | Mapping[str, Decimal] | None],
     fx_tables: Mapping[str, MonthlyFxRates],
 ) -> dict[str, dict[str, object]]:
     result: dict[str, dict[str, object]] = {}
@@ -873,14 +909,19 @@ def summarize_periods(
         previous = _summarize_range(previous_period, daily_totals, fx_tables)
         current_decimal = current.pop("_cny_decimal")
         previous_decimal = previous.pop("_cny_decimal")
+        current_units = current.pop("_units_decimal")
+        previous_units = previous.pop("_units_decimal")
         assert isinstance(current_decimal, Decimal)
         assert isinstance(previous_decimal, Decimal)
+        assert isinstance(current_units, Decimal)
+        assert isinstance(previous_units, Decimal)
         result[period.key] = {
             "label": period.label,
             **current,
             "comparison": {
                 **previous,
                 **_comparison_values(current_decimal, previous_decimal),
+                **_unit_comparison_values(current_units, previous_units),
             },
         }
     return result
@@ -891,6 +932,13 @@ def decimal_to_string(amount: Decimal) -> str:
     if rounded == 0:
         rounded = Decimal("0.00")
     return format(rounded, ".2f")
+
+
+def quantity_to_string(quantity: Decimal) -> str:
+    if quantity == 0:
+        return "0"
+    rendered = format(quantity, "f")
+    return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
 
 
 def percent_to_string(percent: Decimal) -> str:
@@ -922,6 +970,25 @@ def format_comparison(comparison: Mapping[str, object]) -> str:
     return "="
 
 
+def format_unit_comparison(comparison: Mapping[str, object]) -> str:
+    return format_comparison(
+        {
+            "direction": comparison["unit_direction"],
+            "change_percent": comparison["unit_change_percent"],
+        }
+    )
+
+
+def format_units(units: object) -> str:
+    try:
+        quantity = Decimal(str(units))
+    except InvalidOperation as exc:
+        raise ReporterError(f"报告包含无效的销售数量：{units}") from exc
+    if quantity % 1:
+        return f"{quantity:,f}".rstrip("0").rstrip(".")
+    return f"{quantity:,.0f}"
+
+
 def format_amounts(amounts: Mapping[str, str]) -> str:
     if not amounts:
         return "无收入"
@@ -934,6 +1001,7 @@ def render_markdown(report: Mapping[str, object]) -> str:
         "",
         f"> Apple 报表统计截止日（太平洋时间）：{report['end_date']}",
         "> 收入口径：Units × Developer Proceeds，统一折算为 CNY",
+        "> 销售数量口径：净 Units，退款负数会冲减",
         "> 对比口径：与紧邻的上一等长周期相比",
         "",
     ]
@@ -948,6 +1016,9 @@ def render_markdown(report: Mapping[str, object]) -> str:
             [
                 f"**{period['label']}**　{format_cny(period['cny_amount'])}　"
                 f"{format_comparison(comparison)}",
+                f"> 销售数量 {format_units(period['units'])}　"
+                f"{format_unit_comparison(comparison)}；"
+                f"上期 {format_units(comparison['units'])}",
                 f"> {period['start_date']} 至 {period['end_date']}；"
                 f"上期 {format_cny(comparison['cny_amount'])}",
                 "",
@@ -1074,8 +1145,8 @@ def collect_daily_totals(
     start_date: date,
     end_date: date,
     raw_dir: Path,
-) -> dict[date, dict[str, Decimal] | None]:
-    result: dict[date, dict[str, Decimal] | None] = {}
+) -> dict[date, DailyTotals | None]:
+    result: dict[date, DailyTotals | None] = {}
     for current in iter_dates(start_date, end_date):
         cache_path = raw_dir / f"{current.isoformat()}.tsv.gz"
         cached = _read_cached_report(cache_path)
@@ -1091,15 +1162,18 @@ def collect_daily_totals(
             tsv_text = decode_report_payload(payload)
             _write_cached_report(cache_path, tsv_text)
             source = "Apple"
-        totals = parse_report_totals(tsv_text)
+        totals = parse_daily_totals(tsv_text)
         result[current] = totals
-        print(f"{current.isoformat()}：已从{source}读取，{len(totals)} 个收益币种")
+        print(
+            f"{current.isoformat()}：已从{source}读取，"
+            f"{len(totals.amounts)} 个收益币种，净销售数量 {quantity_to_string(totals.units)}"
+        )
     return result
 
 
 def build_report(
     end_date: date,
-    daily_totals: Mapping[date, Mapping[str, Decimal] | None],
+    daily_totals: Mapping[date, DailyTotals | Mapping[str, Decimal] | None],
     fx_tables: Mapping[str, MonthlyFxRates] | None = None,
     auth_method: str | None = None,
 ) -> dict[str, object]:
@@ -1114,6 +1188,7 @@ def build_report(
         "auth_method": auth_method,
         "definitions": {
             "revenue": "Units multiplied by Developer Proceeds, grouped by Currency of Proceeds",
+            "units": "net Units from Apple reports; refunds with negative Units reduce the total",
             "last_quarter": "rolling 90 Apple reporting days ending on end_date",
             "comparison": "immediately preceding period with the same number of days",
             "cny_conversion": (
