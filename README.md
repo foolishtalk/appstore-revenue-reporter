@@ -1,29 +1,35 @@
 # App Store Revenue Reporter
 
-把 App Store Connect 的 Sales and Trends 报表整理成一条可读的企业微信收益日报。
+**English** | [简体中文](README.zh-CN.md)
 
-项目使用 Apple 官方 Reporter 下载 `Summary Sales Report`，按 `Units × Developer Proceeds` 计算开发者预估收益，将不同结算币种统一折算为 CNY，并展示与上一等长周期相比的涨跌幅。
+Turn App Store Connect Sales and Trends reports into concise daily revenue updates for WeCom.
 
-> 当前统计契约：**Proceeds + Pacific Time + CNY**。这里的收入指开发者预估收益，不是用户支付的 Sales，也不是最终财务结算。
+The reporter downloads Apple's official `Summary Sales Report`, calculates estimated developer revenue as `Units × Developer Proceeds`, converts proceeds from multiple currencies to CNY, and compares each reporting window with the immediately preceding period of equal length.
 
-## 功能
+> Reporting contract: **Proceeds + Pacific Time + CNY**. Revenue means estimated developer proceeds—not customer-paid Sales or final financial settlement.
 
-- 使用 Reporter Access Token，不需要 Apple ID 密码或 App 专用密码。
-- 输出最新日报日、最近 7 天、最近 30 天和滚动 90 天的收益与净销售数量。
-- 自动计算前一日、前 7 天、前 30 天和前 90 天的收益、销售数量环比变化。
-- 使用上一个自然月的日均参考汇率，将多币种收益折算为 CNY。
-- 生成适合企业微信机器人的 Markdown，以及包含审计明细的 JSON。
-- 缓存 Apple 原始日报与月度冻结汇率，日常运行只补充新数据。
-- 提供 GitHub Actions 定时任务、手动补跑和 Artifact 输出。
+## Features
 
-## 输出示例
+- Authenticate with a Reporter Access Token; no Apple ID password or app-specific password required.
+- Report revenue and paid net units for the latest daily report, trailing 7 days, trailing 30 days, and rolling 90 days.
+- Compare revenue and sales units with the preceding day or equal-length period.
+- Convert multi-currency proceeds to CNY using reference rates frozen by report month.
+- Generate WeCom-compatible Markdown and an auditable JSON summary.
+- Show sales and refund quantities grouped by the actual product `Title`.
+- Exclude free downloads, re-downloads, updates, zero-net-unit products, and `CMB-C` bundle credits where appropriate.
+- Cache raw Apple reports and monthly exchange rates so routine runs only fetch new data.
+- Include a GitHub Actions schedule, manual backfills, and workflow artifacts.
+
+## Example Output
+
+The generated WeCom report is currently written in Chinese:
 
 ```text
 # App Store 收入日报
 
 > Apple 报表统计截止日（太平洋时间）：2026-01-31
 > 收入口径：Units × Developer Proceeds，统一折算为 CNY
-> 销售数量：产生收益的净 Units（不含免费下载、重新下载和更新）
+> 销售数量口径：产生收益的净 Units；不含免费下载、重新下载和更新
 > 对比口径：与紧邻的上一等长周期相比
 
 最近 7 天　¥800.00　+14.3%
@@ -32,21 +38,13 @@
 > 销售项目：示例项目 A × 80；示例项目 B × 40
 > 退款数量 3；
 > 退款项目：示例项目 A × 2；示例项目 B × 1
-最近 30 天　¥3,200.00　-5.9%
-> 销售数量 480　-4%；
-> 上期 500；
-> 销售项目：示例项目 A × 320；示例项目 B × 160
-最近一个季度（滚动 90 天）　¥9,600.00　+2.1%
-> 销售数量 1,500　+2%；
-> 上期 1,470；
-> 销售项目：示例项目 A × 1,000；示例项目 B × 500
 ```
 
-示例只用于展示格式。实际消息还会列出各窗口日期、上一周期金额、数据覆盖和汇率口径。
+The example only demonstrates the format. Actual messages also include all reporting windows, date ranges, previous-period revenue, data coverage, and the exchange-rate methodology.
 
-## 快速开始
+## Quick Start
 
-运行环境：Python 3.11+、Java 8+。
+Requirements: Python 3.11+ and Java 8+.
 
 ```bash
 python3 -m venv .venv
@@ -59,47 +57,47 @@ export ASC_VENDOR_NUMBER='...'
 python scripts/fetch_appstore_revenue.py
 ```
 
-发送到企业微信：
+To send the report to WeCom:
 
 ```bash
 export WECOM_WEBHOOK_URL='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...'
 python scripts/fetch_appstore_revenue.py --send-wecom
 ```
 
-完整的凭证获取、参数说明和 GitHub Actions 部署步骤见[快速开始](docs/getting-started.md)。
+See the [getting-started guide](docs/getting-started.md) for credential setup, configuration options, and GitHub Actions deployment.
 
-> 推荐把真实定时任务部署到 **Private 仓库**。GitHub Free 的私有仓库额度足够运行本项目，同时避免公开销售报表缓存和 Artifact。
+> Deploy real scheduled jobs in a **private repository**. This keeps raw sales-report caches and workflow artifacts from being exposed publicly.
 
-## 统计口径
+## Reporting Methodology
 
-| 项目 | 口径 |
+| Item | Method |
 | --- | --- |
-| 收益指标 | `Developer Proceeds`，按 `Units × Developer Proceeds` 汇总 |
-| 销售数量 | 仅统计 `Developer Proceeds` 非零行的净 `Units`；按 `Title` 展示项目，净数量为 0 的项目不显示 |
-| 退款数量 | 单独汇总负 `Units` 的绝对数量并按 `Title` 展示；不包含 `CMB-C` 套装抵扣 |
-| 报表时区 | `America/Los_Angeles`，即 Pacific Time |
-| 展示币种 | CNY |
-| 汇率 | 报表月使用上一个自然月的日均参考汇率，月内冻结 |
-| 日报比较 | 当前日报日与前一日 |
-| 7/30/90 天比较 | 与紧邻的上一等长周期 |
-| 数据性质 | Sales and Trends 预估收益，不是 Finance Report 最终结算 |
+| Revenue | `Developer Proceeds`, aggregated as `Units × Developer Proceeds` |
+| Sales units | Paid net `Units` from rows with non-zero `Developer Proceeds`, grouped by `Title`; zero-net-unit products are hidden |
+| Refund units | Absolute quantity of negative `Units`, grouped by `Title`; excludes `CMB-C` bundle credits |
+| Report timezone | `America/Los_Angeles` (Pacific Time) |
+| Display currency | CNY |
+| Exchange rates | Each report month uses the previous calendar month's average daily reference rates, frozen for the month |
+| Daily comparison | Current report day versus the preceding day |
+| 7/30/90-day comparison | Current period versus the immediately preceding equal-length period |
+| Data status | Estimated Sales and Trends proceeds, not final Finance Report settlement |
 
-App Store Connect 网页默认可能显示 UTC 和 Sales。核对数据时，请在后台选择 `Pacific Time` 和 `Proceeds`。详细计算公式、汇率策略和 Apple 报表限制见[统计口径](docs/reporting-methodology.md)。
+App Store Connect may default to UTC and Sales. For reconciliation, select `Pacific Time` and `Proceeds`. See the [reporting methodology](docs/reporting-methodology.md) for formulas, exchange-rate policy, and Apple report limitations.
 
-## 配置
+## Configuration
 
-Reporter 模式是默认认证方式，只需要：
+Reporter authentication is the default and only requires:
 
-| 环境变量 / GitHub Secret | 必填 | 说明 |
+| Environment variable / GitHub Secret | Required | Description |
 | --- | --- | --- |
-| `ASC_REPORTER_ACCESS_TOKEN` | 是 | Apple Reporter Access Token |
-| `ASC_VENDOR_NUMBER` | 是 | App Store Connect Vendor Number |
-| `WECOM_WEBHOOK_URL` | 发送时 | 企业微信群机器人完整 Webhook URL |
-| `ASC_REPORTER_ACCOUNT` | 多账号时 | Reporter Account Number；仅错误码 `214` 时需要 |
+| `ASC_REPORTER_ACCESS_TOKEN` | Yes | Apple Reporter Access Token |
+| `ASC_VENDOR_NUMBER` | Yes | App Store Connect Vendor Number |
+| `WECOM_WEBHOOK_URL` | When sending | Full WeCom group-bot webhook URL |
+| `ASC_REPORTER_ACCOUNT` | Multi-account only | Reporter Account Number; needed only for error code `214` |
 
-可复制 [.env.example](.env.example) 查看全部可选项。项目也保留了 App Store Connect Team API Key 兼容模式。
+Copy [.env.example](.env.example) to review all optional settings. App Store Connect Team API Key authentication remains available as a compatibility mode.
 
-## 项目结构
+## Project Structure
 
 ```text
 .
@@ -120,36 +118,36 @@ Reporter 模式是默认认证方式，只需要：
 └── requirements.txt
 ```
 
-运行后会生成：
+Each run generates:
 
 ```text
 output/
-├── fx-rates/              # 按报表月冻结的 CNY 汇率
-├── raw/                   # Apple 原始日报缓存
-├── revenue-summary.json   # 机器可读结果及审计信息
-└── revenue-summary.md     # 企业微信 Markdown
+├── fx-rates/              # CNY rates frozen by report month
+├── raw/                   # Cached raw Apple daily reports
+├── revenue-summary.json   # Machine-readable result and audit details
+└── revenue-summary.md     # WeCom Markdown
 ```
 
-## 开发
+## Development
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-当前测试覆盖 Reporter 认证、临时凭证文件、错误重试、gzip/TSV 解析、CNY 汇率、周期比较、企业微信发送和安全校验。参与开发前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Tests cover Reporter authentication, temporary credential files, retries, gzip/TSV parsing, CNY conversion, period comparisons, sales and refund details, WeCom delivery, and security validation. Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing.
 
-## 文档
+## Documentation
 
-- [快速开始与部署](docs/getting-started.md)
-- [统计口径与对账方法](docs/reporting-methodology.md)
-- [架构与数据流](docs/architecture.md)
-- [运行维护与故障排查](docs/operations.md)
-- [安全策略](SECURITY.md)
+- [Getting started and deployment](docs/getting-started.md)
+- [Reporting methodology and reconciliation](docs/reporting-methodology.md)
+- [Architecture and data flow](docs/architecture.md)
+- [Operations and troubleshooting](docs/operations.md)
+- [Security policy](SECURITY.md)
 
-## 安全
+## Security
 
-Reporter Token、Webhook、`.p8` 私钥和原始销售报表都属于敏感信息。不要提交 `.env`、`output/`、`.cache/` 或真实报表样本。发现凭证泄露时应立即轮换，具体流程见 [SECURITY.md](SECURITY.md)。
+Reporter tokens, webhook URLs, `.p8` private keys, and raw sales reports are sensitive. Never commit `.env`, `output/`, `.cache/`, or real report samples. Rotate exposed credentials immediately by following [SECURITY.md](SECURITY.md).
 
 ## License
 
-本项目使用 [MIT License](LICENSE)。
+This project is licensed under the [MIT License](LICENSE).
