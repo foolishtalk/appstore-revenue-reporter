@@ -479,7 +479,10 @@ class SummaryTests(unittest.TestCase):
             ],
         )
         markdown = reporter.render_markdown(report)
-        self.assertIn("销售项目：测试项目 A × 2；测试项目 B × 1", markdown)
+        self.assertIn(
+            "销售项目：测试项目 A × 2；\n> 销售项目：测试项目 B × 1；",
+            markdown,
+        )
         last_7_days = markdown.split("**最近 7 天**", 1)[1].split(
             "**最近 30 天**", 1
         )[0]

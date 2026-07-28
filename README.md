@@ -32,9 +32,11 @@ The generated WeCom report is currently written in Chinese:
 最近 7 天　¥800.00　+14.3%
 > 销售数量 120　+20%；
 > 上期 100；
-> 销售项目：示例项目 A × 80；示例项目 B × 40
+> 销售项目：示例项目 A × 80；
+> 销售项目：示例项目 B × 40；
 > 退款数量 3；
-> 退款项目：示例项目 A × 2；示例项目 B × 1
+> 退款项目：示例项目 A × 2；
+> 退款项目：示例项目 B × 1；
 ```
 
 The example only demonstrates the format. Actual messages also include all reporting windows, date ranges, and previous-period revenue. A data-coverage warning appears only when one or more daily reports are unavailable.

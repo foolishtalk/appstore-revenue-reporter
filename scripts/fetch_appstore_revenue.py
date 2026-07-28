@@ -1030,7 +1030,7 @@ def format_units(units: object) -> str:
     return f"{quantity:,.0f}"
 
 
-def format_unit_items(items: object) -> str | None:
+def format_unit_items(items: object) -> list[str]:
     if not isinstance(items, list):
         raise ReporterError("报告中的销售项目明细格式无效")
     rendered = []
@@ -1044,7 +1044,7 @@ def format_unit_items(items: object) -> str | None:
         if units == 0:
             continue
         rendered.append(f"{item['product']} × {format_units(item['units'])}")
-    return "；".join(rendered) if rendered else None
+    return rendered
 
 
 def format_amounts(amounts: Mapping[str, str]) -> str:
@@ -1077,13 +1077,11 @@ def render_markdown(report: Mapping[str, object]) -> str:
             ]
         )
         unit_items = format_unit_items(period["unit_items"])
-        if unit_items:
-            lines.append(f"> 销售项目：{unit_items}")
+        lines.extend(f"> 销售项目：{item}；" for item in unit_items)
         if Decimal(str(period["refund_units"])) > 0:
             lines.append(f"> 退款数量 {format_units(period['refund_units'])}；")
             refund_items = format_unit_items(period["refund_items"])
-            if refund_items:
-                lines.append(f"> 退款项目：{refund_items}")
+            lines.extend(f"> 退款项目：{item}；" for item in refund_items)
         lines.extend(
             [
                 f"> {period['start_date']} 至 {period['end_date']}；"
