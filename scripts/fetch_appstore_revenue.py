@@ -20,7 +20,7 @@ import tempfile
 import time
 import zipfile
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
@@ -174,6 +174,9 @@ class DailyTotals:
 
     amounts: Mapping[str, Decimal]
     units: Decimal
+    units_by_product: Mapping[str, Decimal] = field(default_factory=dict)
+    refund_units: Decimal = Decimal("0")
+    refund_units_by_product: Mapping[str, Decimal] = field(default_factory=dict)
 
 
 def build_jwt(config: AppStoreConfig, now: int | None = None) -> str:
@@ -780,6 +783,9 @@ def parse_daily_totals(tsv_text: str) -> DailyTotals:
 
     totals: defaultdict[str, Decimal] = defaultdict(Decimal)
     total_units = Decimal("0")
+    units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
+    refund_units = Decimal("0")
+    refund_units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
     for row_number, row in enumerate(reader, start=2):
         if not any(value and value.strip() for value in row.values()):
             continue
@@ -796,7 +802,20 @@ def parse_daily_totals(tsv_text: str) -> DailyTotals:
         # updates. They have zero Developer Proceeds and are not paid sales.
         if proceeds_per_unit != 0:
             total_units += units
-    return DailyTotals(dict(totals), total_units)
+            product = _first_value(row, ("Title", "SKU", "Apple Identifier"))
+            product = product or "未命名项目"
+            units_by_product[product] += units
+            if units < 0 and (row.get("CMB") or "").strip() != "CMB-C":
+                refunded = abs(units)
+                refund_units += refunded
+                refund_units_by_product[product] += refunded
+    return DailyTotals(
+        dict(totals),
+        total_units,
+        dict(units_by_product),
+        refund_units,
+        dict(refund_units_by_product),
+    )
 
 
 def parse_report_totals(tsv_text: str) -> dict[str, Decimal]:
@@ -839,6 +858,9 @@ def _summarize_range(
     totals: defaultdict[str, Decimal] = defaultdict(Decimal)
     cny_total = Decimal("0")
     unit_total = Decimal("0")
+    units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
+    refund_unit_total = Decimal("0")
+    refund_units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
     report_dates = []
     no_report_dates = []
     for current in iter_dates(period.start_date, period.end_date):
@@ -850,6 +872,11 @@ def _summarize_range(
         if isinstance(day, DailyTotals):
             amounts = day.amounts
             unit_total += day.units
+            for product, units in day.units_by_product.items():
+                units_by_product[product] += units
+            refund_unit_total += day.refund_units
+            for product, units in day.refund_units_by_product.items():
+                refund_units_by_product[product] += units
         else:
             # Backward compatibility for callers that supplied revenue-only mappings.
             amounts = day
@@ -868,6 +895,17 @@ def _summarize_range(
         },
         "cny_amount": decimal_to_string(cny_total),
         "units": quantity_to_string(unit_total),
+        "unit_items": [
+            {"product": product, "units": quantity_to_string(units)}
+            for product, units in sorted(units_by_product.items())
+            if units != 0
+        ],
+        "refund_units": quantity_to_string(refund_unit_total),
+        "refund_items": [
+            {"product": product, "units": quantity_to_string(units)}
+            for product, units in sorted(refund_units_by_product.items())
+            if units != 0
+        ],
         "_cny_decimal": cny_total,
         "_units_decimal": unit_total,
     }
@@ -992,6 +1030,23 @@ def format_units(units: object) -> str:
     return f"{quantity:,.0f}"
 
 
+def format_unit_items(items: object) -> str | None:
+    if not isinstance(items, list):
+        raise ReporterError("报告中的销售项目明细格式无效")
+    rendered = []
+    for item in items:
+        if not isinstance(item, dict) or "product" not in item or "units" not in item:
+            raise ReporterError("报告中的销售项目明细格式无效")
+        try:
+            units = Decimal(str(item["units"]))
+        except InvalidOperation as exc:
+            raise ReporterError("报告中的销售项目明细格式无效") from exc
+        if units == 0:
+            continue
+        rendered.append(f"{item['product']} × {format_units(item['units'])}")
+    return "；".join(rendered) if rendered else None
+
+
 def format_amounts(amounts: Mapping[str, str]) -> str:
     if not amounts:
         return "无收入"
@@ -1020,8 +1075,20 @@ def render_markdown(report: Mapping[str, object]) -> str:
                 f"**{period['label']}**　{format_cny(period['cny_amount'])}　"
                 f"{format_comparison(comparison)}",
                 f"> 销售数量 {format_units(period['units'])}　"
-                f"{format_unit_comparison(comparison)}；"
-                f"上期 {format_units(comparison['units'])}",
+                f"{format_unit_comparison(comparison)}；",
+                f"> 上期 {format_units(comparison['units'])}；",
+            ]
+        )
+        unit_items = format_unit_items(period["unit_items"])
+        if unit_items:
+            lines.append(f"> 销售项目：{unit_items}")
+        if Decimal(str(period["refund_units"])) > 0:
+            lines.append(f"> 退款数量 {format_units(period['refund_units'])}；")
+            refund_items = format_unit_items(period["refund_items"])
+            if refund_items:
+                lines.append(f"> 退款项目：{refund_items}")
+        lines.extend(
+            [
                 f"> {period['start_date']} 至 {period['end_date']}；"
                 f"上期 {format_cny(comparison['cny_amount'])}",
                 "",
@@ -1193,7 +1260,12 @@ def build_report(
             "revenue": "Units multiplied by Developer Proceeds, grouped by Currency of Proceeds",
             "units": (
                 "net Units on rows with non-zero Developer Proceeds; excludes free "
-                "downloads, re-downloads, and updates"
+                "downloads, re-downloads, and updates; unit_items groups non-zero "
+                "net Units by Title"
+            ),
+            "refund_units": (
+                "absolute value of negative paid Units, excluding CMB-C bundle credits; "
+                "refund_items groups refund quantities by Title"
             ),
             "last_quarter": "rolling 90 Apple reporting days ending on end_date",
             "comparison": "immediately preceding period with the same number of days",

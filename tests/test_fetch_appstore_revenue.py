@@ -162,7 +162,7 @@ class ParsingTests(unittest.TestCase):
         "Title\tUnits\tDeveloper Proceeds\tCurrency of Proceeds\n"
         "App A\t2\t0.70\tUSD\n"
         "App B\t3\t1.25\tUSD\n"
-        "App A refund\t-1\t0.70\tUSD\n"
+        "App A\t-1\t0.70\tUSD\n"
         "App C\t2\t4.50\tCNY\n"
     )
 
@@ -174,6 +174,12 @@ class ParsingTests(unittest.TestCase):
         daily = reporter.parse_daily_totals(text)
         self.assertEqual(daily.units, Decimal("6"))
         self.assertEqual(daily.amounts, totals)
+        self.assertEqual(
+            daily.units_by_product,
+            {"App A": Decimal("1"), "App B": Decimal("3"), "App C": Decimal("2")},
+        )
+        self.assertEqual(daily.refund_units, Decimal("1"))
+        self.assertEqual(daily.refund_units_by_product, {"App A": Decimal("1")})
 
     def test_supports_legacy_currency_header(self):
         tsv = "Units\tDeveloper Proceeds\tDeveloper Proceeds Currency\n2\t1.50\teur\n"
@@ -421,7 +427,7 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(comparison["unit_direction"], "up")
         markdown = reporter.render_markdown(report)
         self.assertIn("销售数量 84", markdown)
-        self.assertIn("上期 70", markdown)
+        self.assertIn("销售数量 84　<font color=\"info\">+20%</font>；\n> 上期 70；", markdown)
 
     def test_refund_units_reduce_sales_quantity(self):
         end = date(2026, 7, 13)
@@ -435,6 +441,76 @@ class SummaryTests(unittest.TestCase):
         )
         period = reporter.build_report(end, daily)["periods"]["last_7_days"]
         self.assertEqual(period["units"], "8")
+
+    def test_sales_items_are_named_and_zero_net_items_are_hidden(self):
+        end = date(2026, 7, 13)
+        daily = {
+            current: reporter.DailyTotals({}, Decimal("0"))
+            for current in reporter.iter_dates(reporter.required_start_date(end), end)
+        }
+        daily[end] = reporter.DailyTotals(
+            {"CNY": Decimal("30")},
+            Decimal("4"),
+            {
+                "测试项目 A": Decimal("2"),
+                "测试项目 B": Decimal("1"),
+                "已全部退款项目": Decimal("1"),
+            },
+        )
+        daily[end - reporter.timedelta(days=1)] = reporter.DailyTotals(
+            {},
+            Decimal("-1"),
+            {"已全部退款项目": Decimal("-1")},
+        )
+
+        report = reporter.build_report(end, daily)
+        period = report["periods"]["last_7_days"]
+        self.assertEqual(
+            period["unit_items"],
+            [
+                {"product": "测试项目 A", "units": "2"},
+                {"product": "测试项目 B", "units": "1"},
+            ],
+        )
+        markdown = reporter.render_markdown(report)
+        self.assertIn("销售项目：测试项目 A × 2；测试项目 B × 1", markdown)
+        last_7_days = markdown.split("**最近 7 天**", 1)[1].split(
+            "**最近 30 天**", 1
+        )[0]
+        self.assertNotIn("销售项目：已全部退款项目", last_7_days)
+
+    def test_refunds_are_shown_separately_by_product(self):
+        end = date(2026, 7, 13)
+        daily = {
+            current: reporter.DailyTotals({}, Decimal("0"))
+            for current in reporter.iter_dates(reporter.required_start_date(end), end)
+        }
+        daily[end] = reporter.DailyTotals(
+            {"CNY": Decimal("-20")},
+            Decimal("-2"),
+            {"测试项目 A": Decimal("-2")},
+            Decimal("2"),
+            {"测试项目 A": Decimal("2")},
+        )
+
+        report = reporter.build_report(end, daily)
+        period = report["periods"]["yesterday"]
+        self.assertEqual(period["refund_units"], "2")
+        self.assertEqual(
+            period["refund_items"], [{"product": "测试项目 A", "units": "2"}]
+        )
+        markdown = reporter.render_markdown(report)
+        self.assertIn("退款数量 2；", markdown)
+        self.assertIn("退款项目：测试项目 A × 2", markdown)
+
+    def test_cmb_bundle_credit_is_not_counted_as_refund(self):
+        tsv = (
+            "Title\tUnits\tDeveloper Proceeds\tCurrency of Proceeds\tCMB\n"
+            "套装中的旧 App\t-1\t1.00\tCNY\tCMB-C\n"
+        )
+        totals = reporter.parse_daily_totals(tsv)
+        self.assertEqual(totals.refund_units, Decimal("0"))
+        self.assertEqual(totals.refund_units_by_product, {})
 
     def test_zero_previous_period_is_shown_as_new(self):
         end = date(2026, 7, 13)
