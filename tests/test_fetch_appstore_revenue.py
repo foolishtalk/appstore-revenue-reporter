@@ -363,6 +363,7 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(amounts, {"CNY": "12.00", "USD": "6.00"})
         self.assertEqual(period["cny_amount"], "54.00")
         self.assertEqual(report["coverage"]["no_report_days"], 1)
+        self.assertIn("数据覆盖：取得 179/180 份日报", reporter.render_markdown(report))
 
     def test_markdown_contains_all_periods(self):
         end = date(2026, 7, 13)
@@ -375,8 +376,13 @@ class SummaryTests(unittest.TestCase):
         self.assertIn("最近 7 天", markdown)
         self.assertIn("最近 30 天", markdown)
         self.assertIn("滚动 90 天", markdown)
-        self.assertIn("统一折算为 CNY", markdown)
         self.assertIn("上期 ¥", markdown)
+        self.assertNotIn("收入口径", markdown)
+        self.assertNotIn("销售数量口径", markdown)
+        self.assertNotIn("对比口径", markdown)
+        self.assertNotIn("数据覆盖", markdown)
+        self.assertNotIn("汇率：", markdown)
+        self.assertNotIn("Finance Report", markdown)
 
     def test_zero_amount_currencies_are_hidden(self):
         end = date(2026, 7, 13)

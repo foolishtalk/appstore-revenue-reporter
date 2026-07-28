@@ -1058,9 +1058,6 @@ def render_markdown(report: Mapping[str, object]) -> str:
         "# App Store 收入日报",
         "",
         f"> Apple 报表统计截止日（太平洋时间）：{report['end_date']}",
-        "> 收入口径：Units × Developer Proceeds，统一折算为 CNY",
-        "> 销售数量口径：产生收益的净 Units；不含免费下载、重新下载和更新",
-        "> 对比口径：与紧邻的上一等长周期相比",
         "",
     ]
     period_data = report["periods"]
@@ -1097,15 +1094,12 @@ def render_markdown(report: Mapping[str, object]) -> str:
 
     coverage = report["coverage"]
     assert isinstance(coverage, dict)
-    lines.append(
-        f"> 数据覆盖：取得 {coverage['report_days']}/{coverage['requested_days']} 份日报；"
-        f"其余 {coverage['no_report_days']} 天 Apple 未提供报表（通常表示当天无销售单位）"
-    )
-    lines.append("")
-    lines.append("> 汇率：每个报表月固定使用上一个自然月的日均参考汇率；月内不变")
-    lines.append("")
-    lines.append("> Sales and Trends 为预估收益，正式结算以 Finance Report 为准")
-    return "\n".join(lines)
+    if coverage["report_days"] != coverage["requested_days"]:
+        lines.append(
+            f"> 数据覆盖：取得 {coverage['report_days']}/{coverage['requested_days']} 份日报；"
+            f"其余 {coverage['no_report_days']} 天 Apple 未提供报表"
+        )
+    return "\n".join(lines).rstrip()
 
 
 def split_markdown(markdown: str, max_bytes: int = MAX_WECOM_MESSAGE_BYTES) -> list[str]:

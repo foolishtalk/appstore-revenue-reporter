@@ -28,9 +28,6 @@ The generated WeCom report is currently written in Chinese:
 # App Store 收入日报
 
 > Apple 报表统计截止日（太平洋时间）：2026-01-31
-> 收入口径：Units × Developer Proceeds，统一折算为 CNY
-> 销售数量口径：产生收益的净 Units；不含免费下载、重新下载和更新
-> 对比口径：与紧邻的上一等长周期相比
 
 最近 7 天　¥800.00　+14.3%
 > 销售数量 120　+20%；
@@ -40,7 +37,7 @@ The generated WeCom report is currently written in Chinese:
 > 退款项目：示例项目 A × 2；示例项目 B × 1
 ```
 
-The example only demonstrates the format. Actual messages also include all reporting windows, date ranges, previous-period revenue, data coverage, and the exchange-rate methodology.
+The example only demonstrates the format. Actual messages also include all reporting windows, date ranges, and previous-period revenue. A data-coverage warning appears only when one or more daily reports are unavailable.
 
 ## Quick Start
 
@@ -69,6 +66,16 @@ See the [getting-started guide](docs/getting-started.md) for credential setup, c
 > Deploy real scheduled jobs in a **private repository**. This keeps raw sales-report caches and workflow artifacts from being exposed publicly.
 
 ## Reporting Methodology
+
+> Revenue: `Units × Developer Proceeds`, converted to CNY.
+>
+> Sales units: paid net `Units`, excluding free downloads, re-downloads, and updates.
+>
+> Comparisons: each window is compared with the immediately preceding period of equal length.
+>
+> Exchange rates: each report month uses the previous calendar month's average daily reference rates, frozen for the month.
+>
+> Data status: Sales and Trends provides estimated proceeds; final settlement is determined by Finance Reports.
 
 | Item | Method |
 | --- | --- |
