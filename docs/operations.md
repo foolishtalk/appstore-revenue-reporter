@@ -4,7 +4,7 @@
 
 ## 日常运行
 
-GitHub Actions 每天 `17:17 UTC` 运行。该时间对应 Pacific Time 的 `09:17` 或 `10:17`，通常晚于 Apple 日报的 `08:00 PT` 发布时间。
+GitHub Actions 每天 `12:17 UTC` 运行，即北京时间 `20:17`，对应 Pacific Time 的 `04:17` 或 `05:17`。
 
 工作流顺序：
 

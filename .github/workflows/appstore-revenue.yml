@@ -2,9 +2,9 @@ name: App Store Revenue Report
 
 on:
   schedule:
-    # 12:00 UTC = 20:00 Asia/Shanghai, and 04:00/05:00 Pacific Time.
+    # 12:17 UTC = 20:17 Asia/Shanghai, and 04:17/05:17 Pacific Time.
     # Apple says daily reports are generally available by 08:00 Pacific Time.
-    - cron: "0 12 * * *"
+    - cron: "17 12 * * *"
   workflow_dispatch:
     inputs:
       end_date:
