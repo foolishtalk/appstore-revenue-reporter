@@ -412,6 +412,19 @@ class SummaryTests(unittest.TestCase):
             '<font color="info">+20%</font>', reporter.render_markdown(report)
         )
 
+    def test_equal_amount_and_sales_units_are_shown_as_unchanged(self):
+        end = date(2026, 7, 13)
+        daily = {
+            current: reporter.DailyTotals({"CNY": Decimal("10")}, Decimal("2"))
+            for current in reporter.iter_dates(reporter.required_start_date(end), end)
+        }
+
+        markdown = reporter.render_markdown(reporter.build_report(end, daily))
+
+        self.assertIn("**最新可用日报日**　¥10.00　持平", markdown)
+        self.assertIn("> 销售数量 2　持平；", markdown)
+        self.assertNotIn("　=", markdown)
+
     def test_sales_units_are_compared_with_previous_period(self):
         end = date(2026, 7, 13)
         daily = {

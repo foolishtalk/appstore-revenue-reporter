@@ -1008,7 +1008,7 @@ def format_comparison(comparison: Mapping[str, object]) -> str:
         return '<font color="info">新增</font>'
     if direction == "turned_negative":
         return '<font color="warning">转负</font>'
-    return "="
+    return "持平"
 
 
 def format_unit_comparison(comparison: Mapping[str, object]) -> str:
