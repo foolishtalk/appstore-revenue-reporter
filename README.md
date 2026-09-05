@@ -71,6 +71,8 @@ See the [getting-started guide](docs/getting-started.md) for credential setup, c
 
 > Revenue: `Units × Developer Proceeds`, converted to CNY.
 >
+> Free first downloads: separately report net `Units` for app types `1`, `1F`, `1T`, and `F1` with zero `Customer Price` and `Developer Proceeds`, by app and period with previous-period totals. Updates, re-downloads, and IAP are excluded. Zero-proceeds rows may omit the proceeds currency.
+
 > Sales units: paid net `Units`, excluding free downloads, re-downloads, and updates.
 >
 > Comparisons: each window is compared with the immediately preceding period of equal length.

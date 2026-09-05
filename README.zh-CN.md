@@ -77,6 +77,8 @@ python scripts/fetch_appstore_revenue.py --send-wecom
 
 > 收入口径：`Units × Developer Proceeds`，统一折算为 CNY。
 >
+> 免费首次下载：单独统计产品类型 `1`、`1F`、`1T`、`F1` 且 `Customer Price` 和 `Developer Proceeds` 均为 0 的净 `Units`，按 App 展示各周期数量和上期总量；不含更新、重新下载和内购。零收益行允许收益币种为空。
+
 > 销售数量口径：产生收益的净 `Units`，不含免费下载、重新下载和更新。
 >
 > 对比口径：与紧邻的上一等长周期相比。

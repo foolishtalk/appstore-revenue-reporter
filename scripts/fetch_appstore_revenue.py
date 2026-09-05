@@ -177,6 +177,7 @@ class DailyTotals:
     units_by_product: Mapping[str, Decimal] = field(default_factory=dict)
     refund_units: Decimal = Decimal("0")
     refund_units_by_product: Mapping[str, Decimal] = field(default_factory=dict)
+    free_downloads_by_product: Mapping[str, Decimal] = field(default_factory=dict)
 
 
 def build_jwt(config: AppStoreConfig, now: int | None = None) -> str:
@@ -786,17 +787,29 @@ def parse_daily_totals(tsv_text: str) -> DailyTotals:
     units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
     refund_units = Decimal("0")
     refund_units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
+    free_downloads: defaultdict[str, Decimal] = defaultdict(Decimal)
     for row_number, row in enumerate(reader, start=2):
         if not any(value and value.strip() for value in row.values()):
             continue
         currency = _first_value(row, currency_fields)
-        if not currency:
-            raise ReporterError(f"日报第 {row_number} 行缺少收益币种")
         try:
             units = Decimal((row.get("Units") or "").strip())
             proceeds_per_unit = Decimal((row.get("Developer Proceeds") or "").strip())
         except InvalidOperation as exc:
             raise ReporterError(f"日报第 {row_number} 行包含无效的 Units 或 Developer Proceeds") from exc
+        if proceeds_per_unit == 0 and (row.get("Product Type Identifier") or "").strip() in {"1", "1F", "1T", "F1"}:
+            try:
+                customer_price = Decimal((row.get("Customer Price") or "").strip())
+            except InvalidOperation as exc:
+                raise ReporterError(f"日报第 {row_number} 行缺少或包含无效的 Customer Price，无法判断免费首次下载") from exc
+            if customer_price == 0:
+                product = _first_value(row, ("Title", "SKU", "Apple Identifier")) or "未命名项目"
+                free_downloads[product] += units
+        if not currency:
+            # Zero-proceeds rows contribute neither revenue nor paid units.
+            if proceeds_per_unit == 0:
+                continue
+            raise ReporterError(f"日报第 {row_number} 行缺少收益币种")
         totals[currency.upper()] += units * proceeds_per_unit
         # Summary Sales Reports also contain free downloads, re-downloads and
         # updates. They have zero Developer Proceeds and are not paid sales.
@@ -815,6 +828,7 @@ def parse_daily_totals(tsv_text: str) -> DailyTotals:
         dict(units_by_product),
         refund_units,
         dict(refund_units_by_product),
+        dict(free_downloads),
     )
 
 
@@ -861,6 +875,7 @@ def _summarize_range(
     units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
     refund_unit_total = Decimal("0")
     refund_units_by_product: defaultdict[str, Decimal] = defaultdict(Decimal)
+    free_downloads: defaultdict[str, Decimal] = defaultdict(Decimal)
     report_dates = []
     no_report_dates = []
     for current in iter_dates(period.start_date, period.end_date):
@@ -870,6 +885,8 @@ def _summarize_range(
             continue
         report_dates.append(current.isoformat())
         if isinstance(day, DailyTotals):
+            for product, downloads in day.free_downloads_by_product.items():
+                free_downloads[product] += downloads
             amounts = day.amounts
             unit_total += day.units
             for product, units in day.units_by_product.items():
@@ -899,6 +916,11 @@ def _summarize_range(
             {"product": product, "units": quantity_to_string(units)}
             for product, units in sorted(units_by_product.items())
             if units != 0
+        ],
+        "free_downloads": quantity_to_string(sum(free_downloads.values(), Decimal("0"))),
+        "free_download_items": [
+            {"product": product, "units": quantity_to_string(downloads)}
+            for product, downloads in sorted(free_downloads.items()) if downloads != 0
         ],
         "refund_units": quantity_to_string(refund_unit_total),
         "refund_items": [
@@ -1076,6 +1098,14 @@ def render_markdown(report: Mapping[str, object]) -> str:
                 f"> 上期 {format_units(comparison['units'])}；",
             ]
         )
+        lines.append(
+            f"> 免费首次下载 {format_units(period['free_downloads'])}；"
+            f"上期 {format_units(comparison['free_downloads'])}；"
+        )
+        lines.extend(
+            f"> 免费下载项目：{item}；"
+            for item in format_unit_items(period["free_download_items"])
+        )
         unit_items = format_unit_items(period["unit_items"])
         lines.extend(f"> 销售项目：{item}；" for item in unit_items)
         if Decimal(str(period["refund_units"])) > 0:
@@ -1224,7 +1254,10 @@ def collect_daily_totals(
             tsv_text = decode_report_payload(payload)
             _write_cached_report(cache_path, tsv_text)
             source = "Apple"
-        totals = parse_daily_totals(tsv_text)
+        try:
+            totals = parse_daily_totals(tsv_text)
+        except ReporterError as exc:
+            raise ReporterError(f"{current.isoformat()}：{exc}") from exc
         result[current] = totals
         print(
             f"{current.isoformat()}：已从{source}读取，"
@@ -1254,6 +1287,10 @@ def build_report(
                 "net Units on rows with non-zero Developer Proceeds; excludes free "
                 "downloads, re-downloads, and updates; unit_items groups non-zero "
                 "net Units by Title"
+            ),
+            "free_downloads": (
+                "net Units for app types 1, 1F, 1T, F1 with zero Customer Price "
+                "and Developer Proceeds; excludes updates, re-downloads and IAP"
             ),
             "refund_units": (
                 "absolute value of negative paid Units, excluding CMB-C bundle credits; "

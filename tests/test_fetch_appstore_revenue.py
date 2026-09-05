@@ -200,6 +200,42 @@ class ParsingTests(unittest.TestCase):
         with self.assertRaisesRegex(reporter.ReporterError, "Developer Proceeds"):
             reporter.parse_report_totals("Units\tCurrency of Proceeds\n1\tUSD\n")
 
+    def test_zero_proceeds_without_currency_does_not_block_paid_sales(self):
+        tsv = (
+            "Title\tUnits\tDeveloper Proceeds\tCurrency of Proceeds\n"
+            "Paid app\t3\t2.00\tCNY\n"
+            "Apertrace\t25\t0.00\t\n"
+            "Paid app\t-1\t2.00\tCNY\n"
+        )
+        totals = reporter.parse_daily_totals(tsv)
+        self.assertEqual(totals.amounts, {"CNY": Decimal("4.00")})
+        self.assertEqual(totals.units, Decimal("2"))
+        self.assertEqual(totals.units_by_product, {"Paid app": Decimal("2")})
+        self.assertEqual(totals.refund_units, Decimal("1"))
+
+    def test_free_first_downloads_exclude_redownloads_updates_and_iap(self):
+        header = "Title\tUnits\tDeveloper Proceeds\tCurrency of Proceeds\tProduct Type Identifier\tCustomer Price\n"
+        rows = [f"Apertrace\t2\t0\t\t{kind}\t0\n" for kind in ("1", "1F", "1T", "F1")]
+        rows += [f"Apertrace\t50\t0\t\t{kind}\t0\n" for kind in ("3", "3F", "7", "F7", "IA1")]
+        rows += ["Paid app\t1\t0\t\t1F\t1.99\n"]
+        daily = reporter.parse_daily_totals(header + "".join(rows))
+        self.assertEqual(daily.free_downloads_by_product, {"Apertrace": Decimal("8")})
+        self.assertEqual(daily.units, Decimal("0"))
+        end = date(2026, 9, 2)
+        report = reporter.build_report(end, {end: daily, end - reporter.timedelta(days=1): daily})
+        self.assertEqual(report["periods"]["last_7_days"]["free_downloads"], "16")
+        self.assertEqual(report["periods"]["yesterday"]["comparison"]["free_downloads"], "8")
+        self.assertIn("免费下载项目：Apertrace × 8", reporter.render_markdown(report))
+
+    def test_nonzero_proceeds_without_currency_still_fails(self):
+        for proceeds in ("2.00", "-2.00", "invalid"):
+            with self.subTest(proceeds=proceeds):
+                with self.assertRaises(reporter.ReporterError):
+                    reporter.parse_daily_totals(
+                        "Units\tDeveloper Proceeds\tCurrency of Proceeds\n"
+                        f"1\t{proceeds}\t\n"
+                    )
+
 
 class ApiTests(unittest.TestCase):
     @patch.object(reporter, "build_jwt", return_value="token")
